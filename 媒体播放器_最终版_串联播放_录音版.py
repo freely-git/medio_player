@@ -505,7 +505,9 @@ class AudioRecorder(QObject):
         self.output_filename = ""
 
     def start_record(self, device_desc=None, filename="record.m4a", bitrate_kbps=128):
-        """bitrate_kbps: 目标比特率（kbps），会真正写入编码器。"""
+        """bitrate_kbps: 目标比特率（kbps）。
+        低码率时自动切「单声道 + 较低采样率」，否则立体声 44.1k 会把码率拆薄，听感发糊、体积还不占优。
+        """
         devices = QMediaDevices.audioInputs()
         selected_device = QMediaDevices.defaultAudioInput()
         if device_desc:
@@ -515,7 +517,7 @@ class AudioRecorder(QObject):
                     break
         self.audio_input.setDevice(selected_device)
 
-        # 明确指定 AAC / MPEG-4 容器，避免系统随便选格式导致码率无效
+        # AAC in .m4a：Windows 上最稳；极低码率靠单声道+降采样保证清晰度
         try:
             fmt = QMediaFormat()
             fmt.setFileFormat(QMediaFormat.FileFormat.MPEG4)
@@ -525,27 +527,38 @@ class AudioRecorder(QObject):
         except Exception:
             pass
 
-        # 恒定比特率模式，这样 setAudioBitRate 才会真正生效
         try:
             self.recorder.setEncodingMode(QMediaRecorder.EncodingMode.ConstantBitRateEncoding)
         except Exception:
             pass
 
-        # 比特率单位是 bit/s，不是 kbps
         try:
             kbps = int(bitrate_kbps) if bitrate_kbps else 128
-            if kbps < 32:
-                kbps = 32
+            if kbps < 16:
+                kbps = 16
             if kbps > 320:
                 kbps = 320
-            self.recorder.setAudioBitRate(kbps * 1000)
+        except Exception:
+            kbps = 128
+
+        # 16~48：单声道 + 较低采样率 → 省空间且人声仍清晰
+        # 64 起：恢复以前的高质量（立体声 44.1kHz）
+        if kbps <= 32:
+            channels, sample_rate = 1, 16000
+        elif kbps <= 48:
+            channels, sample_rate = 1, 22050
+        else:
+            channels, sample_rate = 2, 44100
+
+        try:
+            self.recorder.setAudioSampleRate(sample_rate)
+            self.recorder.setAudioChannelCount(channels)
         except Exception:
             pass
 
-        # 合理默认采样率 / 声道，提升兼容性
+        # 比特率单位是 bit/s；先设声道/采样率再设码率，部分后端才认
         try:
-            self.recorder.setAudioSampleRate(44100)
-            self.recorder.setAudioChannelCount(2)
+            self.recorder.setAudioBitRate(kbps * 1000)
         except Exception:
             pass
 
@@ -1395,16 +1408,22 @@ class SettingsDialog(QDialog):
         bitrate_layout = QHBoxLayout()
         bitrate_layout.addWidget(QLabel("录音比特率:"))
         self.bitrate_combo = QComboBox()
+        # 16~48 单声道省空间；64 起与以前相同的立体声高质量
         bitrate_options = [
-            (64, "64 kbps  (约 4.8 MB / 10分钟)"),
-            (128, "128 kbps (约 9.6 MB / 10分钟)"),
-            (192, "192 kbps (约 14.4 MB / 10分钟)"),
-            (256, "256 kbps (约 19.2 MB / 10分钟)"),
+            (16,  "16 kbps  单声道 · 约 1.2 MB / 10分钟 · 极省空间"),
+            (24,  "24 kbps  单声道 · 约 1.8 MB / 10分钟"),
+            (32,  "32 kbps  单声道 · 约 2.4 MB / 10分钟 · 推荐人声省空间"),
+            (48,  "48 kbps  单声道 · 约 3.6 MB / 10分钟"),
+            (64,  "64 kbps  立体声 · 约 4.8 MB / 10分钟"),
+            (96,  "96 kbps  立体声 · 约 7.2 MB / 10分钟"),
+            (128, "128 kbps 立体声 · 约 9.6 MB / 10分钟"),
+            (192, "192 kbps 立体声 · 约 14.4 MB / 10分钟"),
+            (256, "256 kbps 立体声 · 约 19.2 MB / 10分钟"),
         ]
         for val, text in bitrate_options:
             self.bitrate_combo.addItem(text, val)
-        # 选中当前值，找不到则默认 128
-        idx = 1
+        # 选中当前值，找不到则默认 64（与以前默认档接近）
+        idx = 4
         for i in range(self.bitrate_combo.count()):
             if self.bitrate_combo.itemData(i) == int(current_record_bitrate):
                 idx = i
@@ -2101,6 +2120,74 @@ class VideoWindow(QWidget):
         self.video_frame = QWidget(self)
         main_layout.addWidget(self.video_frame)
 
+
+class VideoSizePopup(QWidget):
+    """视频窗口右键弹出的尺寸滑条（保持 16:9）。"""
+    def __init__(self, owner):
+        super().__init__(None)
+        self.owner = owner
+        self.setWindowFlags(Qt.Tool | Qt.FramelessWindowHint | Qt.NoDropShadowWindowHint)
+        self.setAttribute(Qt.WA_ShowWithoutActivating, True)
+        self.setFixedSize(220, 52)
+        self.setStyleSheet(
+            "QWidget { background: #313244; border: 1px solid #45475a; border-radius: 6px; }"
+            "QLabel { color: #cdd6f4; font-size: 9pt; border: none; }"
+        )
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(10, 6, 10, 6)
+        layout.setSpacing(2)
+        self.label = QLabel("视频大小")
+        self.label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.label)
+        self.slider = QSlider(Qt.Horizontal)
+        # 宽度 320 ~ 1600，对应约 40% ~ 200%（基准 800）
+        self.slider.setRange(320, 1600)
+        self.slider.setValue(800)
+        self.slider.setSingleStep(20)
+        self.slider.setPageStep(80)
+        layout.addWidget(self.slider)
+        self.slider.valueChanged.connect(self._on_slide)
+        self.hide_timer = QTimer(self)
+        self.hide_timer.setSingleShot(True)
+        self.hide_timer.setInterval(400)
+        self.hide_timer.timeout.connect(self._try_hide)
+
+    def _on_slide(self, width):
+        height = max(180, int(width * 9 / 16))
+        self.label.setText(f"视频大小  {width} × {height}")
+        if self.owner:
+            self.owner.apply_video_size(width, height)
+
+    def show_at_button(self, btn):
+        w = self.owner.saved_video_size.width() if self.owner and self.owner.saved_video_size.isValid() else 800
+        w = max(320, min(1600, w))
+        self.slider.blockSignals(True)
+        self.slider.setValue(w)
+        self.slider.blockSignals(False)
+        h = max(180, int(w * 9 / 16))
+        self.label.setText(f"视频大小  {w} × {h}")
+        pos = btn.mapToGlobal(QPoint(0, 0))
+        x = pos.x()
+        y = pos.y() - self.height() - 6
+        self.move(x, y)
+        self.show()
+        self.raise_()
+        self.hide_timer.stop()
+
+    def enterEvent(self, event):
+        self.hide_timer.stop()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self.hide_timer.start()
+        super().leaveEvent(event)
+
+    def _try_hide(self):
+        if not self.underMouse():
+            self.hide()
+            if self.owner:
+                self.owner.save_persistent_settings()
+
 class ClickableLabel(QLabel):
     def __init__(self, text="00:00:00"):
         super().__init__(text)
@@ -2238,7 +2325,7 @@ class ControlWindow(QMainWindow):
         
         self.audio_recorder = AudioRecorder(self)
         self.record_save_dir = str(Path.cwd() / "Recordings")
-        self.record_bitrate_kbps = 128
+        self.record_bitrate_kbps = 64
         self.auto_upload_drive = False
         self.drive_folder_id = ""
         self.playlist_db_path = str(Path.cwd() / "Playlists" / "my_playlists_db.json")
@@ -2509,6 +2596,10 @@ class ControlWindow(QMainWindow):
         controls_layout = QHBoxLayout()
         self.toggle_win_btn = QPushButton(" 视频窗口")
         self.toggle_win_btn.setIcon(self.style().standardIcon(QStyle.SP_DesktopIcon))
+        self.toggle_win_btn.setToolTip("左键: 打开/关闭视频窗口\n右键: 拖动滑条调整窗口大小")
+        self.toggle_win_btn.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.toggle_win_btn.customContextMenuRequested.connect(self.show_video_size_popup)
+        self.video_size_popup = VideoSizePopup(self)
         
         self.load_file_btn = QPushButton(" 载入文件")
         self.load_file_btn.setIcon(self.style().standardIcon(QStyle.SP_DirOpenIcon))
@@ -2620,7 +2711,9 @@ class ControlWindow(QMainWindow):
         self.mini_record_btn.setContextMenuPolicy(Qt.CustomContextMenu)
         self.mini_video_btn = QPushButton("视")
         self.mini_video_btn.setFixedSize(32, 32)
-        self.mini_video_btn.setToolTip("打开 / 关闭视频窗口")
+        self.mini_video_btn.setToolTip("左键: 打开/关闭视频窗口\n右键: 拖动滑条调整窗口大小")
+        self.mini_video_btn.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.mini_video_btn.customContextMenuRequested.connect(self.show_video_size_popup)
         self.mini_exit_btn = QPushButton("✋")
         self.mini_exit_btn.setFixedSize(32, 32)
         self.mini_exit_btn.setToolTip("退出迷你模式，恢复完整窗口")
@@ -2939,6 +3032,8 @@ class ControlWindow(QMainWindow):
             self.save_persistent_settings()
         else:
             dur_ms = int(duration_sec * 1000) if duration_sec and duration_sec > 0 else -1
+            # 排队时记住正在播放的条目，避免 addItem 后选中跑到队尾
+            playing_item = self.current_list_item
             item = self._add_media_item(f"🌐 {title}", stream_url, dur_ms, headers=headers, audio_url=audio_url, original_url=original_url)
 
             if not self.playlist_widget.isVisible(): self.toggle_playlist()
@@ -2947,6 +3042,10 @@ class ControlWindow(QMainWindow):
             if getattr(self, "network_auto_play", True):
                 self.list_widget.setCurrentItem(item)
                 self.handle_list_click(item, is_manual=True)
+            else:
+                # 仅排队：选中保持在当前播放项，不打断播放顺序
+                if playing_item is not None:
+                    self.list_widget.setCurrentItem(playing_item)
 
     def _on_yt_error(self, err_msg):
         if hasattr(self, 'loading_dialog') and self.loading_dialog: self.loading_dialog.close()
@@ -3165,11 +3264,11 @@ class ControlWindow(QMainWindow):
             
         self.record_save_dir = st.value("settings/record_save_dir", str(Path.cwd() / "Recordings"), str)
         try:
-            self.record_bitrate_kbps = int(st.value("settings/record_bitrate_kbps", 128))
+            self.record_bitrate_kbps = int(st.value("settings/record_bitrate_kbps", 64))
         except Exception:
-            self.record_bitrate_kbps = 128
-        if self.record_bitrate_kbps not in (64, 128, 192, 256):
-            self.record_bitrate_kbps = 128
+            self.record_bitrate_kbps = 64
+        if self.record_bitrate_kbps not in (16, 24, 32, 48, 64, 96, 128, 192, 256):
+            self.record_bitrate_kbps = 64
         self.auto_upload_drive = str(st.value("settings/auto_upload_drive", "false")).lower() == "true"
         self.drive_folder_id = st.value("settings/drive_folder_id", "", str)
 
@@ -3826,6 +3925,24 @@ class ControlWindow(QMainWindow):
         if self.video_window: self.close_video_window()
         else: self.open_video_window()
 
+    def show_video_size_popup(self, pos=None):
+        """视频窗口 / 迷你「视」按钮右键：弹出尺寸滑条。"""
+        if not hasattr(self, "video_size_popup") or self.video_size_popup is None:
+            self.video_size_popup = VideoSizePopup(self)
+        btn = self.sender()
+        if not isinstance(btn, QPushButton):
+            btn = self.toggle_win_btn if not getattr(self, "is_mini_mode", False) else self.mini_video_btn
+        self.video_size_popup.show_at_button(btn)
+
+    def apply_video_size(self, width, height):
+        """按滑条调整视频窗口整体大小（16:9），并记住。"""
+        width = max(320, min(1600, int(width)))
+        height = max(180, int(height))
+        self.saved_video_size = QSize(width, height)
+        if self.video_window and self.video_window.isVisible():
+            self.video_window.resize(width, height)
+            self.place_video_above_control()
+
     def toggle_playlist(self):
         if self.is_mini_mode:
             return  # 迷你模式下不展开列表
@@ -3869,7 +3986,8 @@ class ControlWindow(QMainWindow):
             self.setMaximumHeight(self.mini_height)
             self.resize(self.mini_width, self.mini_height)
         else:
-            # 退出迷你模式
+            # 退出迷你模式：位置留在迷你窗被拖到的地方，不要跳回进入迷你时的坐标
+            current_pos = self.pos()
             self.mini_container.hide()
             self.top_container.show()
             self.is_mini_mode = False
@@ -3891,21 +4009,9 @@ class ControlWindow(QMainWindow):
                 self.setMaximumHeight(self.collapsed_height)
                 self.resize(680, self.collapsed_height)
 
-            if self._normal_geometry is not None:
-                try:
-                    self.restoreGeometry(self._normal_geometry)
-                except Exception:
-                    pass
-                # restoreGeometry 可能覆盖高度，再按列表状态校正一次
-                if self._playlist_was_open:
-                    self.setMinimumHeight(self.collapsed_height + 120)
-                    self.setMaximumHeight(16777215)
-                    if self.height() < self.expanded_height:
-                        self.resize(680, self.expanded_height)
-                else:
-                    self.setMinimumHeight(self.collapsed_height)
-                    self.setMaximumHeight(self.collapsed_height)
-                    self.resize(680, self.collapsed_height)
+            # 保持迷你窗当前位置（左上角对齐），避免 restoreGeometry 跳回原处
+            self.move(current_pos)
+            self._normal_geometry = None
 
     def _set_play_icon(self, playing: bool):
         """同步完整窗口与迷你窗口的播放/暂停图标"""
@@ -4070,16 +4176,27 @@ class ControlWindow(QMainWindow):
                 return
 
             if state == vlc.State.Ended or is_end_of_chain or is_segment_end:
-                current_row = self.list_widget.currentRow()
+                # 必须按「正在播放的条目」找下一首，不能用列表选中行 currentRow()
+                # 否则中途往列表末尾排队（如网络资源）会把选中挪走，播完就跳到队尾
+                if self.current_list_item is not None:
+                    current_row = self.list_widget.row(self.current_list_item)
+                else:
+                    current_row = self.list_widget.currentRow()
+                if current_row < 0:
+                    current_row = 0
                 next_row = current_row + 1
                 while next_row < self.list_widget.count():
                     next_item = self.list_widget.item(next_row)
-                    if next_item.data(Qt.UserRole) in self.auto_skip_paths: next_row += 1
+                    if not next_item:
+                        next_row += 1
+                        continue
+                    if next_item.data(Qt.UserRole) in self.auto_skip_paths:
+                        next_row += 1
                     else:
                         self.list_widget.setCurrentRow(next_row)
                         self.handle_list_click(next_item, is_manual=False)
                         return
-                        
+
                 self.player.stop()
                 self.timer.stop()
                 self.is_paused = True
@@ -4148,6 +4265,25 @@ class ControlWindow(QMainWindow):
             reply = QMessageBox.question(self, "正在录音", "当前正在录音中，是否关闭软件？\n(确认关闭将自动切断并保存录音)", QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
             if reply == QMessageBox.Yes: self.audio_recorder.stop_record()
             else: event.ignore(); return
+
+        # 播放中（含暂停）关闭时二次确认，避免误关打断内容
+        is_content_active = False
+        try:
+            st = self.player.get_state()
+            if st in (vlc.State.Playing, vlc.State.Paused) and getattr(self, "current_media_path", None):
+                is_content_active = True
+        except Exception:
+            pass
+        if is_content_active:
+            reply = QMessageBox.question(
+                self, "正在播放",
+                "当前正在播放内容，是否关闭软件？",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if reply != QMessageBox.Yes:
+                event.ignore()
+                return
 
         try:
             self.save_persistent_settings()
