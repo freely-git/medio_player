@@ -208,6 +208,11 @@ class DriveUploadWorker(QThread):
                 # 无论是首次授权还是 refresh，都写回 token.json，保证下次直接复用
                 with open(token_path, 'w', encoding='utf-8') as token:
                     token.write(creds.to_json())
+                # 尽量限制 token 文件权限（Windows 上 chmod 作用有限，Unix 有效）
+                try:
+                    os.chmod(token_path, 0o600)
+                except Exception:
+                    pass
 
             service = build('drive', 'v3', credentials=creds)
             file_name = os.path.basename(self.filepath)
@@ -238,6 +243,10 @@ class YtDlpWorker(QThread):
         self.fake_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
 
     def run(self):
+        ok, reason = is_safe_network_url(self.url)
+        if not ok:
+            self.error_signal.emit(f"链接不安全或格式无效：{reason}")
+            return
         try:
             yt_dlp = import_ytdlp()
         except ImportError:
@@ -245,13 +254,15 @@ class YtDlpWorker(QThread):
             return
 
         try:
+            # 仅解析、不下载；关闭外部下载器相关风险面
             ydl_opts = {
                 'format': 'bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[protocol^=http][protocol!*=dash][ext=mp4]/best[protocol^=http]/best[ext=mp4]/best',
                 'quiet': True,
                 'noplaylist': True,
                 'no_warnings': True,
+                'no_color': True,
                 'extractor_args': {'youtube': {'player_client': ['android', 'ios', 'web']}},
-                'http_headers': {'User-Agent': self.fake_agent, 'Accept-Language': 'en-US,en;q=0.9'}
+                'http_headers': {'User-Agent': self.fake_agent, 'Accept-Language': 'en-US,en;q=0.9'},
             }
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(self.url, download=False)
@@ -264,6 +275,58 @@ class YtDlpWorker(QThread):
 # yt-dlp 用户目录更新（打包后也能升级，不依赖对方电脑有 Python/pip）
 # 从官方 PyPI 下载 py3-none-any.whl，解压到可写目录，启动时优先加载
 # ==========================================
+def is_safe_network_url(url: str) -> tuple:
+    """校验用户输入的网络链接，防止把 yt-dlp 选项或本地路径当 URL。
+
+    返回 (ok: bool, reason: str)。
+    """
+    if not url or not isinstance(url, str):
+        return False, "链接为空"
+    u = url.strip()
+    if not u:
+        return False, "链接为空"
+    # 禁止以 - 开头（可被某些工具当成命令行选项）
+    if u.startswith("-"):
+        return False, "链接不能以 - 开头"
+    # 禁止明显的本地/特殊协议
+    lower = u.lower()
+    for bad in ("file:", "javascript:", "data:", "vbscript:", "about:"):
+        if lower.startswith(bad):
+            return False, f"不支持的协议: {bad.rstrip(':')}"
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(u)
+        scheme = (parsed.scheme or "").lower()
+        if scheme not in ("http", "https"):
+            return False, "仅允许 http / https 链接"
+        if not parsed.netloc:
+            return False, "缺少有效的主机名"
+        # 主机名也不应是纯选项形态
+        host = parsed.hostname or ""
+        if host.startswith("-"):
+            return False, "主机名非法"
+    except Exception as e:
+        return False, f"无法解析链接: {e}"
+    return True, ""
+
+
+def sanitize_filename_component(name: str, max_len: int = 80) -> str:
+    """去掉路径分隔符与 Windows 非法文件名字符，防止录音文件名路径穿越。"""
+    if not name:
+        return "未命名"
+    # 统一去掉路径成分
+    name = name.replace("\\", "_").replace("/", "_")
+    for ch in '<>:"|?*\x00':
+        name = name.replace(ch, "_")
+    name = "".join(c for c in name if ord(c) >= 32)
+    name = name.strip(" .")
+    if not name:
+        name = "未命名"
+    if len(name) > max_len:
+        name = name[:max_len]
+    return name
+
+
 def get_ytdlp_user_dir() -> Path:
     """可写目录：存放从官方下载的 yt-dlp，打包版/源码版通用。"""
     if platform.system() == "Windows":
@@ -358,19 +421,93 @@ class YtDlpUpdateWorker(QThread):
 
 
 class YtDlpInstallWorker(QThread):
-    """从官方 PyPI 下载 yt-dlp 的 py3-none-any.whl 并解压到用户目录。
-    打包成 exe 后、对方电脑没有 Python/pip 也能更新。
-    重启软件后 ensure_ytdlp_path() 会优先加载新版本。
+    """从官方 PyPI 安全下载 yt-dlp 的 py3-none-any.whl 并解压到用户目录。
+
+    安全措施（SEC-01）：
+    - 仅允许 HTTPS 且主机为 files.pythonhosted.org / pypi.org
+    - 用 PyPI 元数据中的 SHA-256 校验下载内容
+    - 限制下载体积与解压后总大小
+    - 禁止 ZIP Slip / 符号链接，仅安装 yt_dlp/ 包目录
     """
     finished_signal = Signal(bool, str)
     progress_signal = Signal(str)
     PYPI_URL = "https://pypi.org/pypi/yt-dlp/json"
+    ALLOWED_DOWNLOAD_HOSTS = frozenset({
+        "files.pythonhosted.org",
+        "pypi.org",
+        "pypi.python.org",
+    })
+    MAX_DOWNLOAD_BYTES = 100 * 1024 * 1024   # 100 MiB
+    MAX_EXTRACTED_BYTES = 300 * 1024 * 1024  # 300 MiB
+
+    def _is_allowed_url(self, url: str) -> bool:
+        try:
+            from urllib.parse import urlparse
+            u = urlparse(url)
+            if u.scheme.lower() != "https":
+                return False
+            host = (u.hostname or "").lower()
+            return host in self.ALLOWED_DOWNLOAD_HOSTS
+        except Exception:
+            return False
+
+    def _safe_extract_yt_dlp(self, zf, dest_dir: Path) -> int:
+        """逐项安全解压，只写入 yt_dlp/ 下的普通文件。返回解压字节数。"""
+        import zipfile
+        extracted = 0
+        dest_root = dest_dir.resolve()
+        for info in zf.infolist():
+            name = info.filename.replace("\\", "/")
+            # 只要包内的 yt_dlp/ 目录
+            if not (name == "yt_dlp" or name.startswith("yt_dlp/")):
+                continue
+            # 拒绝绝对路径、盘符、路径穿越
+            if name.startswith("/") or name.startswith("\\") or ":" in name.split("/")[0]:
+                raise ValueError(f"拒绝危险路径: {name}")
+            parts = name.split("/")
+            if ".." in parts:
+                raise ValueError(f"拒绝路径穿越: {name}")
+            # 拒绝符号链接（ZIP 中 symlink 常带外链属性）
+            is_symlink = (
+                (info.external_attr >> 16) & 0o170000 == 0o120000
+            ) or stat_s_islnk(info)
+            if is_symlink:
+                raise ValueError(f"拒绝符号链接: {name}")
+            if info.is_dir() or name.endswith("/"):
+                target = (dest_root / Path(*parts)).resolve()
+                if not str(target).startswith(str(dest_root)):
+                    raise ValueError(f"拒绝目录越界: {name}")
+                target.mkdir(parents=True, exist_ok=True)
+                continue
+            # 普通文件
+            if info.file_size < 0:
+                raise ValueError(f"非法文件大小: {name}")
+            extracted += info.file_size
+            if extracted > self.MAX_EXTRACTED_BYTES:
+                raise ValueError("解压后体积超过安全上限 (300 MiB)")
+            target = (dest_root / Path(*parts)).resolve()
+            if not str(target).startswith(str(dest_root)):
+                raise ValueError(f"拒绝文件越界: {name}")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with zf.open(info, "r") as src, open(target, "wb") as out:
+                remaining = info.file_size
+                while remaining > 0:
+                    chunk = src.read(min(65536, remaining))
+                    if not chunk:
+                        break
+                    out.write(chunk)
+                    remaining -= len(chunk)
+        if extracted == 0:
+            raise ValueError("安装包中未找到 yt_dlp/ 目录")
+        return extracted
 
     def run(self):
         import urllib.request
         import tempfile
         import zipfile
         import shutil
+        import hashlib
+        from urllib.parse import urlparse
 
         try:
             self.progress_signal.emit("正在查询官方 PyPI (pypi.org)…")
@@ -379,6 +516,11 @@ class YtDlpInstallWorker(QThread):
                 headers={"User-Agent": "MediaConsole-yt-dlp-update/1.0"}
             )
             with urllib.request.urlopen(req, timeout=15) as resp:
+                # 元数据也必须来自 https pypi.org
+                final = resp.geturl() if hasattr(resp, "geturl") else self.PYPI_URL
+                if not self._is_allowed_url(final) and not self._is_allowed_url(self.PYPI_URL):
+                    self.finished_signal.emit(False, "PyPI 元数据地址不在白名单内，已中止。")
+                    return
                 data = json.loads(resp.read().decode("utf-8"))
 
             version = data.get("info", {}).get("version", "")
@@ -387,90 +529,136 @@ class YtDlpInstallWorker(QThread):
                 return
             self.progress_signal.emit(f"官方最新版本：{version}")
 
-            # 选纯 Python 的 wheel：yt_dlp-xxx-py3-none-any.whl（官方发布，无第三方）
+            # 仅接受官方 py3-none-any.whl（不再兜底任意 wheel，降低风险）
             files = data.get("urls", [])
             wheel = None
             for f in files:
                 name = f.get("filename", "")
-                if name.endswith("py3-none-any.whl") and f.get("packagetype") == "bdist_wheel":
+                if (
+                    name.endswith("py3-none-any.whl")
+                    and f.get("packagetype") == "bdist_wheel"
+                    and f.get("url")
+                ):
                     wheel = f
                     break
             if not wheel:
-                # 兜底：任意 .whl
-                for f in files:
-                    if f.get("filename", "").endswith(".whl"):
-                        wheel = f
-                        break
-            if not wheel or not wheel.get("url"):
-                self.finished_signal.emit(False, "官方 PyPI 上未找到可用的 yt-dlp 安装包。")
+                self.finished_signal.emit(False, "官方 PyPI 上未找到 yt-dlp 的 py3-none-any.whl。")
                 return
 
             url = wheel["url"]
             filename = wheel.get("filename", "yt_dlp.whl")
-            size = wheel.get("size") or 0
+            size = int(wheel.get("size") or 0)
+            digests = wheel.get("digests") or {}
+            expected_sha256 = (digests.get("sha256") or "").lower().strip()
+            if not expected_sha256 or len(expected_sha256) != 64:
+                self.finished_signal.emit(False, "PyPI 未提供有效的 SHA-256，已中止安装。")
+                return
+
+            if not self._is_allowed_url(url):
+                self.finished_signal.emit(
+                    False,
+                    f"下载地址不在官方白名单内，已中止：\n{urlparse(url).hostname}"
+                )
+                return
+            if size > self.MAX_DOWNLOAD_BYTES:
+                self.finished_signal.emit(False, f"声明体积过大 ({size} bytes)，已中止。")
+                return
+
             self.progress_signal.emit(f"开始下载：{filename}")
             if size:
                 self.progress_signal.emit(f"文件大小：约 {size / 1024 / 1024:.1f} MB")
+            self.progress_signal.emit("将校验官方 SHA-256…")
 
-            # 下载到临时文件
             tmp_dir = Path(tempfile.mkdtemp(prefix="ytdlp_upd_"))
-            whl_path = tmp_dir / filename
+            # 文件名只保留安全字符，防止路径注入
+            safe_name = "".join(c for c in filename if c.isalnum() or c in "._-") or "yt_dlp.whl"
+            whl_path = tmp_dir / safe_name
+
             try:
-                def _report(block_num, block_size, total):
-                    if total > 0 and block_num % 20 == 0:
-                        got = min(block_num * block_size, total)
-                        pct = got * 100 // total
-                        self.progress_signal.emit(f"下载中… {pct}%  ({got // 1024} KB / {total // 1024} KB)")
+                # 自定义下载：跟随重定向但每跳检查主机；限制总大小；边下边算哈希
+                hasher = hashlib.sha256()
+                downloaded = 0
 
-                urllib.request.urlretrieve(url, str(whl_path), reporthook=_report)
-                self.progress_signal.emit("下载完成，正在解压…")
+                class _RedirectHandler(urllib.request.HTTPRedirectHandler):
+                    def redirect_request(self, req, fp, code, msg, headers, newurl):
+                        if not YtDlpInstallWorker._is_allowed_url(self_worker, newurl):
+                            raise urllib.error.HTTPError(
+                                newurl, code, "Redirect host not allowed", headers, fp
+                            )
+                        return urllib.request.HTTPRedirectHandler.redirect_request(
+                            self, req, fp, code, msg, headers, newurl
+                        )
 
-                # wheel 本质是 zip，解压出 yt_dlp 包
+                self_worker = self
+                opener = urllib.request.build_opener(_RedirectHandler)
+                dl_req = urllib.request.Request(
+                    url, headers={"User-Agent": "MediaConsole-yt-dlp-update/1.0"}
+                )
+                with opener.open(dl_req, timeout=60) as resp:
+                    final_url = resp.geturl() if hasattr(resp, "geturl") else url
+                    if not self._is_allowed_url(final_url):
+                        self.finished_signal.emit(False, "重定向后的下载地址不在白名单，已中止。")
+                        return
+                    with open(whl_path, "wb") as out:
+                        while True:
+                            chunk = resp.read(65536)
+                            if not chunk:
+                                break
+                            downloaded += len(chunk)
+                            if downloaded > self.MAX_DOWNLOAD_BYTES:
+                                raise ValueError("下载超过 100 MiB 安全上限")
+                            hasher.update(chunk)
+                            out.write(chunk)
+                            if size > 0 and downloaded % (20 * 65536) < 65536:
+                                pct = min(100, downloaded * 100 // size)
+                                self.progress_signal.emit(
+                                    f"下载中… {pct}%  ({downloaded // 1024} KB)"
+                                )
+
+                actual_sha256 = hasher.hexdigest().lower()
+                if actual_sha256 != expected_sha256:
+                    self.finished_signal.emit(
+                        False,
+                        "SHA-256 校验失败，安装包可能被篡改，已中止。\n"
+                        f"期望：{expected_sha256}\n实际：{actual_sha256}"
+                    )
+                    return
+                self.progress_signal.emit("SHA-256 校验通过，正在安全解压…")
+
                 extract_tmp = tmp_dir / "extracted"
                 extract_tmp.mkdir()
                 with zipfile.ZipFile(str(whl_path), "r") as zf:
-                    zf.extractall(str(extract_tmp))
+                    # 基础完整性
+                    bad = zf.testzip()
+                    if bad is not None:
+                        self.finished_signal.emit(False, f"安装包损坏：{bad}")
+                        return
+                    self._safe_extract_yt_dlp(zf, extract_tmp)
 
-                # 确认有 yt_dlp 目录或模块
                 src_pkg = extract_tmp / "yt_dlp"
-                if not src_pkg.exists():
-                    # 有的结构可能不同，把整个解压内容拷过去
-                    src_pkg = extract_tmp
+                if not src_pkg.is_dir():
+                    self.finished_signal.emit(False, "解压后未找到 yt_dlp 包目录。")
+                    return
 
                 target = get_ytdlp_user_dir()
                 self.progress_signal.emit(f"安装到：{target}")
 
-                # 清掉旧的 yt_dlp，再拷入新的
                 old = target / "yt_dlp"
                 if old.exists():
                     shutil.rmtree(old, ignore_errors=True)
-                # 拷贝包目录
-                if (extract_tmp / "yt_dlp").exists():
-                    shutil.copytree(str(extract_tmp / "yt_dlp"), str(target / "yt_dlp"))
-                else:
-                    for item in extract_tmp.iterdir():
-                        dest = target / item.name
-                        if item.is_dir():
-                            if dest.exists():
-                                shutil.rmtree(dest, ignore_errors=True)
-                            shutil.copytree(str(item), str(dest))
-                        else:
-                            shutil.copy2(str(item), str(dest))
+                # 只安装 yt_dlp/，不把 dist-info 等其它内容放进导入路径
+                shutil.copytree(str(src_pkg), str(target / "yt_dlp"))
 
-                # 写入版本标记
                 (target / "INSTALLED_VERSION.txt").write_text(version, encoding="utf-8")
 
-                # 立即让当前进程也能看到（下次启动更稳妥）
                 ensure_ytdlp_path()
                 try:
-                    import importlib
                     if "yt_dlp" in sys.modules:
                         del sys.modules["yt_dlp"]
-                        # 清掉子模块缓存
                         for k in list(sys.modules.keys()):
                             if k.startswith("yt_dlp."):
                                 del sys.modules[k]
-                    yt_dlp = import_ytdlp()
+                    import_ytdlp()
                     ver = get_ytdlp_version_str() or version
                 except Exception:
                     ver = version
@@ -478,8 +666,9 @@ class YtDlpInstallWorker(QThread):
                 self.progress_signal.emit(f"安装完成，版本 {ver}")
                 self.finished_signal.emit(
                     True,
-                    f"已从官方 PyPI 下载并安装完成。\n"
+                    f"已从官方 PyPI 安全下载并安装完成。\n"
                     f"当前版本：{ver}\n"
+                    f"SHA-256 已校验\n"
                     f"存放位置：{target}\n\n"
                     f"建议重启软件后再解析网络链接。"
                 )
@@ -488,6 +677,19 @@ class YtDlpInstallWorker(QThread):
 
         except Exception as e:
             self.finished_signal.emit(False, f"更新失败：\n{e}")
+
+
+def stat_s_islnk(info) -> bool:
+    """兼容判断 ZIP 项是否为符号链接（无 Unix 模式时返回 False）。"""
+    try:
+        import stat
+        mode = info.external_attr >> 16
+        if mode:
+            return stat.S_ISLNK(mode)
+    except Exception:
+        pass
+    return False
+
 
 
 # ==========================================
@@ -2963,6 +3165,10 @@ class ControlWindow(QMainWindow):
         url, ok = QInputDialog.getText(self, "载入网络流媒体", "请输入支持的视频链接 (如 YouTube URL):")
         if ok and url.strip():
             url = url.strip()
+            safe, reason = is_safe_network_url(url)
+            if not safe:
+                QMessageBox.warning(self, "链接无效", f"无法载入该链接：\n{reason}")
+                return
             self.loading_dialog = QDialog(self)
             self.loading_dialog.setWindowTitle("网络探针")
             self.loading_dialog.setFixedSize(280, 100)
@@ -2982,7 +3188,11 @@ class ControlWindow(QMainWindow):
     def reload_network_item(self, item):
         url = item.data(DragDropListWidget.ORIGINAL_URL_ROLE)
         if not url: url = item.data(Qt.UserRole)
-        
+        safe, reason = is_safe_network_url(str(url or ""))
+        if not safe:
+            QMessageBox.warning(self, "链接无效", f"无法重新解析：\n{reason}")
+            return
+
         self.loading_dialog = QDialog(self)
         self.loading_dialog.setWindowTitle("重新加载")
         self.loading_dialog.setFixedSize(280, 100)
@@ -3019,6 +3229,11 @@ class ControlWindow(QMainWindow):
 
         if not stream_url:
             QMessageBox.warning(self, "解析失败", "未能获取到真实的流媒体直连地址。")
+            return
+        # 解析结果也应是可播放的网络地址（拒绝 file: 等）
+        stream_ok, stream_reason = is_safe_network_url(str(stream_url))
+        if not stream_ok and not str(stream_url).startswith("http"):
+            QMessageBox.warning(self, "解析失败", f"得到的播放地址不安全：\n{stream_reason}")
             return
 
         if item_to_update:
@@ -3142,11 +3357,17 @@ class ControlWindow(QMainWindow):
         if not file_path:
             return
         try:
+            # 限制导入文件大小，避免异常大 JSON 拖垮内存
+            fsize = Path(file_path).stat().st_size
+            if fsize > 5 * 1024 * 1024:
+                raise ValueError("配置文件过大（超过 5 MB），已拒绝导入")
             with open(file_path, 'r', encoding='utf-8') as f:
                 new_db = json.load(f)
             
             if not isinstance(new_db, list):
                 raise ValueError("无效的配置文件格式")
+            if len(new_db) > 500:
+                raise ValueError("分组数量过多（超过 500），已拒绝导入")
 
             reply = QMessageBox.question(
                 self, "导入模式", 
@@ -3713,8 +3934,15 @@ class ControlWindow(QMainWindow):
                 Path(save_dir).mkdir(parents=True, exist_ok=True)
                 
             timestamp = datetime.now().strftime("%Y-%m-%d(%H_%M_%S)")
-            title_str = f"【{self.custom_title}】" if self.custom_title else "【未命名通道】"
+            safe_title = sanitize_filename_component(self.custom_title or "未命名通道")
+            title_str = f"【{safe_title}】"
             filename = str(Path(save_dir) / f"{title_str}_{timestamp}.m4a")
+            # 再次确保最终路径仍落在录音目录内（防路径穿越）
+            try:
+                if Path(filename).resolve().parent != Path(save_dir).resolve():
+                    filename = str(Path(save_dir) / f"录音_{timestamp}.m4a")
+            except Exception:
+                filename = str(Path(save_dir) / f"录音_{timestamp}.m4a")
 
             success = self.audio_recorder.start_record(
                 None, filename, bitrate_kbps=getattr(self, "record_bitrate_kbps", 128)
