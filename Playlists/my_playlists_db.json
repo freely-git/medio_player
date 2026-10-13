@@ -1,0 +1,421 @@
+[
+  {
+    "folder_name": "乌克兰语见证场",
+    "playlists": [
+      {
+        "name": "乌克兰语第一场",
+        "items": [
+          {
+            "audio_url": "",
+            "chains": [],
+            "headers": {},
+            "name": "1、Православна пісня Вклоняюсь до землі.mp3",
+            "original_url": "",
+            "path": "C:\\Users\\PcVIP\\Desktop\\自开发软件\\成品软件\\视频播放器\\乌克兰语\\1.乌克兰语第一场\\1、Православна пісня Вклоняюсь до землі.mp3",
+            "points": [],
+            "segment": []
+          },
+          {
+            "audio_url": "",
+            "chains": [],
+            "headers": {},
+            "name": "1-й день.mp3",
+            "original_url": "",
+            "path": "C:\\Users\\PcVIP\\Desktop\\自开发软件\\成品软件\\视频播放器\\乌克兰语\\1.乌克兰语第一场\\1-й день.mp3",
+            "points": [],
+            "segment": []
+          }
+        ]
+      },
+      {
+        "name": "乌克兰语第二场",
+        "items": [
+          {
+            "audio_url": "",
+            "chains": [],
+            "headers": {},
+            "name": "Прийди Христе, прийди.mp4",
+            "original_url": "",
+            "path": "C:\\Users\\PcVIP\\Desktop\\自开发软件\\成品软件\\视频播放器\\乌克兰语\\2.乌克兰语第二场\\Прийди Христе, прийди.mp4",
+            "points": [],
+            "segment": []
+          },
+          {
+            "audio_url": "",
+            "chains": [],
+            "headers": {},
+            "name": "2-й день.mp3",
+            "original_url": "",
+            "path": "C:\\Users\\PcVIP\\Desktop\\自开发软件\\成品软件\\视频播放器\\乌克兰语\\2.乌克兰语第二场\\2-й день.mp3",
+            "points": [],
+            "segment": []
+          }
+        ]
+      },
+      {
+        "name": "乌克兰语第三场",
+        "items": [
+          {
+            "audio_url": "",
+            "chains": [],
+            "headers": {},
+            "name": "Дмитро Семенюк - Я знаю, зрозумієш... (HOLYCHORDS).mp3",
+            "original_url": "",
+            "path": "C:\\Users\\PcVIP\\Desktop\\自开发软件\\成品软件\\视频播放器\\乌克兰语\\3.乌克兰语第三场\\Дмитро Семенюк - Я знаю, зрозумієш... (HOLYCHORDS).mp3",
+            "points": [],
+            "segment": []
+          },
+          {
+            "audio_url": "",
+            "chains": [],
+            "headers": {},
+            "name": "0603 3 й день.mp4",
+            "original_url": "",
+            "path": "C:\\Users\\PcVIP\\Desktop\\自开发软件\\成品软件\\视频播放器\\乌克兰语\\3.乌克兰语第三场\\0603 3 й день.mp4",
+            "points": [
+              783000,
+              1393000
+            ],
+            "segment": []
+          }
+        ]
+      },
+      {
+        "name": "乌克兰语第四场",
+        "items": [
+          {
+            "audio_url": "",
+            "chains": [],
+            "headers": {},
+            "name": "4-Голос Сіону - Час тяжкий останій (HOLYCHORDS).mp3",
+            "original_url": "",
+            "path": "C:\\Users\\PcVIP\\Desktop\\自开发软件\\成品软件\\视频播放器\\乌克兰语\\4.乌克兰语第四场\\4-Голос Сіону - Час тяжкий останій (HOLYCHORDS).mp3",
+            "points": [],
+            "segment": []
+          },
+          {
+            "audio_url": "",
+            "chains": [],
+            "headers": {},
+            "name": "4-й день.mp3",
+            "original_url": "",
+            "path": "C:\\Users\\PcVIP\\Desktop\\自开发软件\\成品软件\\视频播放器\\乌克兰语\\4.乌克兰语第四场\\4-й день.mp3",
+            "points": [],
+            "segment": []
+          }
+        ]
+      },
+      {
+        "name": "乌克兰语第五场",
+        "items": [
+          {
+            "audio_url": "",
+            "chains": [],
+            "headers": {},
+            "name": "Божі вівці чують Його голос.m4a",
+            "original_url": "",
+            "path": "C:\\Users\\PcVIP\\Desktop\\自开发软件\\成品软件\\视频播放器\\乌克兰语\\5.乌克兰语第五场\\Божі вівці чують Його голос.m4a",
+            "points": [],
+            "segment": []
+          },
+          {
+            "audio_url": "",
+            "chains": [],
+            "headers": {},
+            "name": "5-й день.mp3",
+            "original_url": "",
+            "path": "C:\\Users\\PcVIP\\Desktop\\自开发软件\\成品软件\\视频播放器\\乌克兰语\\5.乌克兰语第五场\\5-й день.mp3",
+            "points": [],
+            "segment": []
+          }
+        ]
+      },
+      {
+        "name": "乌克兰语第六场",
+        "items": [
+          {
+            "audio_url": "",
+            "chains": [],
+            "headers": {},
+            "name": "Божа слава світить зі Сходу.m4a",
+            "original_url": "",
+            "path": "C:\\Users\\PcVIP\\Desktop\\自开发软件\\成品软件\\视频播放器\\乌克兰语\\6.乌克兰语第六场\\Божа слава світить зі Сходу.m4a",
+            "points": [],
+            "segment": []
+          },
+          {
+            "audio_url": "",
+            "chains": [],
+            "headers": {},
+            "name": "0606 6 й день.mp4",
+            "original_url": "",
+            "path": "C:\\Users\\PcVIP\\Desktop\\自开发软件\\成品软件\\视频播放器\\乌克兰语\\6.乌克兰语第六场\\0606 6 й день.mp4",
+            "points": [
+              1983000
+            ],
+            "segment": []
+          }
+        ]
+      },
+      {
+        "name": "乌克兰语第七场",
+        "items": [
+          {
+            "audio_url": "",
+            "chains": [],
+            "headers": {},
+            "name": "Втілений Бог останніх днів вдосконалює людину словами.m4a",
+            "original_url": "",
+            "path": "C:\\Users\\PcVIP\\Desktop\\自开发软件\\成品软件\\视频播放器\\乌克兰语\\7.乌克兰语第七场\\Втілений Бог останніх днів вдосконалює людину словами.m4a",
+            "points": [],
+            "segment": []
+          },
+          {
+            "audio_url": "",
+            "chains": [],
+            "headers": {},
+            "name": "7 й день0607.mp4",
+            "original_url": "",
+            "path": "C:\\Users\\PcVIP\\Desktop\\自开发软件\\成品软件\\视频播放器\\乌克兰语\\7.乌克兰语第七场\\7 й день0607.mp4",
+            "points": [
+              1493000
+            ],
+            "segment": []
+          }
+        ]
+      },
+      {
+        "name": "乌克兰语第八场",
+        "items": [
+          {
+            "audio_url": "",
+            "chains": [],
+            "headers": {},
+            "name": "Чи можуть ті  хто не приймає нову роботу Святого Духа  побачити явлення Бога_.m4a",
+            "original_url": "",
+            "path": "C:\\Users\\PcVIP\\Desktop\\自开发软件\\成品软件\\视频播放器\\乌克兰语\\8.乌克兰语第八场\\Чи можуть ті  хто не приймає нову роботу Святого Духа  побачити явлення Бога_.m4a",
+            "points": [],
+            "segment": []
+          },
+          {
+            "audio_url": "",
+            "chains": [],
+            "headers": {},
+            "name": "0608 8 й день.mp4",
+            "original_url": "",
+            "path": "C:\\Users\\PcVIP\\Desktop\\自开发软件\\成品软件\\视频播放器\\乌克兰语\\8.乌克兰语第八场\\0608 8 й день.mp4",
+            "points": [
+              555000
+            ],
+            "segment": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "folder_name": "亚美尼亚语",
+    "playlists": [
+      {
+        "name": "亚美尼亚第一场",
+        "items": [
+          {
+            "audio_url": "",
+            "chains": [],
+            "headers": {},
+            "name": "1.mp4",
+            "original_url": "",
+            "path": "C:\\Users\\PcVIP\\Desktop\\自开发软件\\成品软件\\视频播放器\\亚美尼亚语\\1.亚美尼亚语第一场\\1.mp4",
+            "points": [],
+            "segment": []
+          },
+          {
+            "audio_url": "",
+            "chains": [],
+            "headers": {},
+            "name": "亚语第一场录音 0919.mp3",
+            "original_url": "",
+            "path": "C:\\Users\\PcVIP\\Desktop\\自开发软件\\成品软件\\视频播放器\\亚美尼亚语\\1.亚美尼亚语第一场\\亚语第一场录音 0919.mp3",
+            "points": [],
+            "segment": []
+          }
+        ]
+      },
+      {
+        "name": "亚美尼亚第二场",
+        "items": [
+          {
+            "audio_url": "",
+            "chains": [],
+            "headers": {},
+            "name": "2.mp4",
+            "original_url": "",
+            "path": "C:\\Users\\PcVIP\\Desktop\\自开发软件\\成品软件\\视频播放器\\亚美尼亚语\\2.亚美尼亚语第二场\\2.mp4",
+            "points": [],
+            "segment": []
+          },
+          {
+            "audio_url": "",
+            "chains": [],
+            "headers": {},
+            "name": "亚语第2场录音 新0701.wav",
+            "original_url": "",
+            "path": "C:\\Users\\PcVIP\\Desktop\\自开发软件\\成品软件\\视频播放器\\亚美尼亚语\\2.亚美尼亚语第二场\\亚语第2场录音 新0701.wav",
+            "points": [],
+            "segment": []
+          }
+        ]
+      },
+      {
+        "name": "亚美尼亚第三场",
+        "items": [
+          {
+            "audio_url": "",
+            "chains": [],
+            "headers": {},
+            "name": "-7-3.mp4",
+            "original_url": "",
+            "path": "C:\\Users\\PcVIP\\Desktop\\自开发软件\\成品软件\\视频播放器\\亚美尼亚语\\3.亚美尼亚语第三场\\-7-3.mp4",
+            "points": [],
+            "segment": []
+          },
+          {
+            "audio_url": "",
+            "chains": [],
+            "headers": {},
+            "name": "亚美第3场 1002 录音.mp3",
+            "original_url": "",
+            "path": "C:\\Users\\PcVIP\\Desktop\\自开发软件\\成品软件\\视频播放器\\亚美尼亚语\\3.亚美尼亚语第三场\\亚美第3场 1002 录音.mp3",
+            "points": [],
+            "segment": []
+          }
+        ]
+      },
+      {
+        "name": "亚美尼亚第四场",
+        "items": [
+          {
+            "audio_url": "",
+            "chains": [],
+            "headers": {},
+            "name": "-4-8.mp4",
+            "original_url": "",
+            "path": "C:\\Users\\PcVIP\\Desktop\\自开发软件\\成品软件\\视频播放器\\亚美尼亚语\\4.亚美尼亚语第四场\\-4-8.mp4",
+            "points": [],
+            "segment": []
+          },
+          {
+            "audio_url": "",
+            "chains": [],
+            "headers": {},
+            "name": "亚美 第4场录音  1003.mp3",
+            "original_url": "",
+            "path": "C:\\Users\\PcVIP\\Desktop\\自开发软件\\成品软件\\视频播放器\\亚美尼亚语\\4.亚美尼亚语第四场\\亚美 第4场录音  1003.mp3",
+            "points": [],
+            "segment": []
+          }
+        ]
+      },
+      {
+        "name": "亚美尼亚第五场",
+        "items": [
+          {
+            "audio_url": "",
+            "chains": [],
+            "headers": {},
+            "name": "5.mp3",
+            "original_url": "",
+            "path": "C:\\Users\\PcVIP\\Desktop\\自开发软件\\成品软件\\视频播放器\\亚美尼亚语\\5.亚美尼亚语第五场\\5.mp3",
+            "points": [],
+            "segment": []
+          },
+          {
+            "audio_url": "",
+            "chains": [],
+            "headers": {},
+            "name": "1006 Թեմա 5 Lusine Babayan & Գայանե Մարտիրոսյան.mp3",
+            "original_url": "",
+            "path": "C:\\Users\\PcVIP\\Desktop\\自开发软件\\成品软件\\视频播放器\\亚美尼亚语\\5.亚美尼亚语第五场\\1006 Թեմա 5 Lusine Babayan & Գայանե Մարտիրոսյան.mp3",
+            "points": [],
+            "segment": []
+          }
+        ]
+      },
+      {
+        "name": "亚美尼亚第六场",
+        "items": [
+          {
+            "audio_url": "",
+            "chains": [],
+            "headers": {},
+            "name": "-2-6.mp4",
+            "original_url": "",
+            "path": "C:\\Users\\PcVIP\\Desktop\\自开发软件\\成品软件\\视频播放器\\亚美尼亚语\\6.亚美尼亚语第六场\\-2-6.mp4",
+            "points": [],
+            "segment": []
+          },
+          {
+            "audio_url": "",
+            "chains": [],
+            "headers": {},
+            "name": "10.2 6场.mp3",
+            "original_url": "",
+            "path": "C:\\Users\\PcVIP\\Desktop\\自开发软件\\成品软件\\视频播放器\\亚美尼亚语\\6.亚美尼亚语第六场\\10.2 6场.mp3",
+            "points": [],
+            "segment": []
+          }
+        ]
+      },
+      {
+        "name": "亚美尼亚第七场",
+        "items": [
+          {
+            "audio_url": "",
+            "chains": [],
+            "headers": {},
+            "name": "-7-3.mp4",
+            "original_url": "",
+            "path": "C:\\Users\\PcVIP\\Desktop\\自开发软件\\成品软件\\视频播放器\\亚美尼亚语\\7.亚美尼亚语第七场\\-7-3.mp4",
+            "points": [],
+            "segment": []
+          },
+          {
+            "audio_url": "",
+            "chains": [],
+            "headers": {},
+            "name": "0109 Թեմա 7 Lusine Babayan & Գայանե Մարտիրոսյան.mp3",
+            "original_url": "",
+            "path": "C:\\Users\\PcVIP\\Desktop\\自开发软件\\成品软件\\视频播放器\\亚美尼亚语\\7.亚美尼亚语第七场\\0109 Թեմա 7 Lusine Babayan & Գայանե Մարտիրոսյան.mp3",
+            "points": [],
+            "segment": []
+          }
+        ]
+      },
+      {
+        "name": "亚美尼亚第八场",
+        "items": [
+          {
+            "audio_url": "",
+            "chains": [],
+            "headers": {},
+            "name": "-4-8.mp4",
+            "original_url": "",
+            "path": "C:\\Users\\PcVIP\\Desktop\\自开发软件\\成品软件\\视频播放器\\亚美尼亚语\\8.亚美尼亚语第八场\\-4-8.mp4",
+            "points": [],
+            "segment": []
+          },
+          {
+            "audio_url": "",
+            "chains": [],
+            "headers": {},
+            "name": "0110 Թեմա 8 Lusine Babayan & Գայանե Մարտիրոսյան.mp3",
+            "original_url": "",
+            "path": "C:\\Users\\PcVIP\\Desktop\\自开发软件\\成品软件\\视频播放器\\亚美尼亚语\\8.亚美尼亚语第八场\\0110 Թեմա 8 Lusine Babayan & Գայանե Մարտիրոսյան.mp3",
+            "points": [],
+            "segment": []
+          }
+        ]
+      }
+    ]
+  }
+]
